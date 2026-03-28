@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Smart Attendance</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg,#1a1a2e, #16213e, #0f3460);
+            color: #c8d6e5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        header {
+            font-size: 3rem;
+            font-weight: 700;
+            color: #00f5d4;
+            margin-bottom: 30px;
+            letter-spacing: 3px;
+            text-shadow: 0 0 15px #00f5d4, 0 0 30px #00f5d4;
+            user-select: none;
+        }
+
+        main {
+            background: rgba(15,20,60,0.9);
+            border-radius: 20px;
+            padding: 40px 50px;
+            box-shadow: 0 15px 35px rgba(0,245,212,0.5);
+            max-width: 720px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+        }
+
+        video {
+            border-radius: 15px;
+            width: 100%;
+            max-width: 640px;
+            box-shadow: 0 12px 30px rgba(0,245,212,0.7);
+            background: #000;
+        }
+
+        #startBtn {
+            margin-top: 30px;
+            background: linear-gradient(45deg, #00f5d4, #00ccd5);
+            border: none;
+            border-radius: 50px;
+            padding: 18px 60px;
+            color: #051923;
+            font-weight: 700;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0, 245, 212, 0.8);
+            transition: background 0.4s ease, box-shadow 0.4s ease;
+            user-select: none;
+        }
+
+        #startBtn:hover:not(:disabled) {
+            background: linear-gradient(45deg, #00ccb5, #00e6d0);
+            box-shadow: 0 10px 25px rgba(0, 230, 208, 1);
+        }
+
+        #startBtn:disabled {
+            background-color: #044d4c;
+            cursor: not-allowed;
+            box-shadow: none;
+            color: #888888;
+        }
+
+        #status {
+            margin-top: 30px;
+            font-size: 1.4rem;
+            min-height: 1.5em;
+            font-weight: 700;
+            user-select: none;
+        }
+
+        #status.success {
+            color: #00ffa5;
+            text-shadow: 0 0 10px #00ffa5;
+        }
+
+        #status.error {
+            color: #ff3d3d;
+            text-shadow: 0 0 15px #ff3d3d;
+        }
+
+        /* Spinner */
+        .spinner {
+            margin-top: 25px;
+            width: 50px;
+            height: 50px;
+            border: 6px solid #007f70;
+            border-top: 6px solid #00f5d4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            #startBtn {
+                padding: 16px 45px;
+                font-size: 1.3rem;
+            }
+            main {
+                padding: 25px 20px;
+            }
+            header {
+                font-size: 2.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+<header>Smart Attendance System</header>
+<main>
+    <video id="video" autoplay muted playsinline></video>
+    <button id="startBtn">Start Attendance</button>
+    <div class="spinner" id="spinner"></div>
+    <p id="status"></p>
+</main>
+
+<script>
+    const video = document.getElementById('video');
+    const startBtn = document.getElementById('startBtn');
+    const status = document.getElementById('status');
+    const spinner = document.getElementById('spinner');
+
+    const constraints = { video: { facingMode: "user" } };
+
+    async function startCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+        } catch (err) {
+            status.textContent = 'Error accessing webcam: ' + err.message;
+            status.className = "error";
+        }
+    }
+
+    async function captureFrames(durationMs = 4000, fps = 5) {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+
+        const frames = [];
+        const intervalMs = 1000 / fps;
+        const totalFrames = Math.floor(durationMs / intervalMs);
+
+        for (let i = 0; i < totalFrames; i++) {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+            frames.push(blob);
+            await new Promise(resolve => setTimeout(resolve, intervalMs));
+        }
+        return frames;
+    }
+
+    async function sendFrames(frames) {
+        const formData = new FormData();
+        frames.forEach((blob, idx) => {
+            formData.append('images', blob, `frame${idx}.jpg`);
+        });
+
+        const response = await fetch('http://localhost:5000/detect-sequence', {
+            method: 'POST',
+            body: formData
+        });
+        return response.json();
+    }
+
+    startBtn.addEventListener('click', async () => {
+        status.textContent = 'Capturing frames, please blink your eyes...';
+        status.className = "";
+        spinner.style.display = 'block';
+        startBtn.disabled = true;
+
+        try {
+            const frames = await captureFrames(4000, 5);
+            status.textContent = 'Sending frames for detection...';
+
+            const result = await sendFrames(frames);
+
+            if (result.matched) {
+                status.textContent = `✅ Success! Student Roll No: ${result.rollNo}`;
+                status.className = "success";
+            } else {
+                status.textContent = `❌ Failed: ${result.message || result.error}`;
+                status.className = "error";
+            }
+        } catch (err) {
+            status.textContent = 'Error: ' + err.message;
+            status.className = "error";
+        } finally {
+            spinner.style.display = 'none';
+            startBtn.disabled = false;
+        }
+    });
+
+    startCamera();
+</script>
+</body>
+</html>
