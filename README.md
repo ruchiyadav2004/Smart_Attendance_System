@@ -40,7 +40,7 @@ User must have:
 ## How to run (quick steps)
 
 1. **Clone the repo**
-  git clone https://github.com/amanchauhan1999/smart-attendance-backend.git
+  git clone https://github.com/ruchiyadav2004/smart-attendance-backend.git
   cd smart-attendance-backend
 
 
